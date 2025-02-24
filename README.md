@@ -112,5 +112,3 @@ Licensed under the **MIT License**.
 ---
 
 ### 🚀 **Smart Retail with AI!** 🎯  
-
-This version is **concise yet informative** while keeping essential details. Let me know if you'd like any modifications! 🚀
