@@ -1,0 +1,10 @@
+names:
+  - Afnan
+  - Teriaq-Intense
+nc: 2
+
+train: ../train/images
+val: ../train/images  # Must define val; temporarily reusing the train folder
+
+# test: ../test/images  # You can remove or comment out 'test'
+
