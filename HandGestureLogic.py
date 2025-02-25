@@ -1,6 +1,7 @@
 import mediapipe as mp
 import numpy as np
 from collections import deque
+from collections import Counter
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
@@ -43,7 +44,7 @@ def angle_between_points(a, b, c):
     cosine_angle = np.clip(dot_prod / (mag_ab * mag_cb), -1.0, 1.0)
     return np.degrees(np.arccos(cosine_angle))
 
-def is_finger_extended(hand_landmarks, finger_name, extension_threshold=160, curl_threshold=90):
+def is_finger_extended(hand_landmarks, finger_name, extension_threshold=160, curl_threshold=100):
     """
     Determines if a finger is extended or curled based on joint angles.
     Returns: (extended, curled)
@@ -68,21 +69,31 @@ def palm_orientation(hand_landmarks):
     palm_vector = vector(wrist, middle_base)
     return np.sign(palm_vector[1])  # Positive = palm up, Negative = palm down
 
-def smooth_gesture(hand_id, gesture):
-    """
-    Manually smooths gestures using a moving average filter.
-    Each hand has its own smoothing buffer.
-    """
-    global gesture_history
-    if hand_id < len(gesture_history):  # Ensure index is within range
-        gesture_history[hand_id].append(gesture)
 
-        # Fast NumPy-based mode calculation
-        gestures_array = np.array(gesture_history[hand_id])
-        unique, counts = np.unique(gestures_array, return_counts=True)
-        return unique[np.argmax(counts)]  # Return most frequent gesture
-    return gesture  # Fallback
+def smooth_gesture(hand_id, gesture, history_size=3):
+    """Smooths gestures using a mode filter with a fixed-size history."""
+    # If the hand_id is not already a key in the gesture_history dictionary, add it with an empty list as the value.
+    if hand_id not in gesture_history:
+        gesture_history[hand_id] = []
 
+    # Get the gesture history for the current hand.
+    history = gesture_history[hand_id]
+    # Add the current gesture to the history.
+    history.append(gesture)
+    # If the history is longer than history_size, remove the oldest gesture.
+    if len(history) > history_size:
+        history.pop(0)
+
+    # If the history is empty, return the current gesture.
+    if not history:
+        return gesture
+
+    # Use Counter to count the occurrences of each gesture in the history.
+    # most_common(1) returns a list containing the most common gesture and its count as a tuple.
+    # [0] extracts the tuple from the list.
+    most_common_gesture, _ = Counter(history).most_common(1)[0]
+    # Return the most common gesture.
+    return most_common_gesture
 def detect_gesture(results):
     """
     Classifies gestures for up to 2 hands independently, optimized for speed.
