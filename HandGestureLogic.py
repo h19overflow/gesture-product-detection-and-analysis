@@ -6,8 +6,8 @@ from collections import Counter
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils  # For drawing landmarks if needed
-hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-
+hands = mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8)
+gesture_state = {}
 # Gesture smoothing buffer
 GESTURE_HISTORY_SIZE = 3
 gesture_history = [deque(maxlen=GESTURE_HISTORY_SIZE) for _ in range(2)]  # Separate buffer for two hands
@@ -70,30 +70,24 @@ def palm_orientation(hand_landmarks):
     return np.sign(palm_vector[1])  # Positive = palm up, Negative = palm down
 
 
-def smooth_gesture(hand_id, gesture, history_size=3):
-    """Smooths gestures using a mode filter with a fixed-size history."""
-    # If the hand_id is not already a key in the gesture_history dictionary, add it with an empty list as the value.
-    if hand_id not in gesture_history:
-        gesture_history[hand_id] = []
-
-    # Get the gesture history for the current hand.
-    history = gesture_history[hand_id]
-    # Add the current gesture to the history.
-    history.append(gesture)
-    # If the history is longer than history_size, remove the oldest gesture.
-    if len(history) > history_size:
-        history.pop(0)
-
-    # If the history is empty, return the current gesture.
-    if not history:
-        return gesture
-
-    # Use Counter to count the occurrences of each gesture in the history.
-    # most_common(1) returns a list containing the most common gesture and its count as a tuple.
-    # [0] extracts the tuple from the list.
-    most_common_gesture, _ = Counter(history).most_common(1)[0]
-    # Return the most common gesture.
-    return most_common_gesture
+def smooth_gesture(hand_id, gesture, confidence ):
+    """
+    Smooth gestures using an exponential moving average (EMA) that
+    weighs recent detections and their confidence.
+    """
+    alpha = .3
+    if hand_id not in gesture_state:
+        gesture_state[hand_id] = {}
+    
+    # Decay previous gesture confidences.
+    for g in gesture_state[hand_id]:
+        gesture_state[hand_id][g] *= (1 - alpha)
+    
+    # Update the current gesture's score.
+    gesture_state[hand_id][gesture] = gesture_state[hand_id].get(gesture, 0) + alpha * confidence
+    
+    # Choose the gesture with the highest smoothed score.
+    return max(gesture_state[hand_id], key=gesture_state[hand_id].get)
 def detect_gesture(results):
     """
     Classifies gestures for up to 2 hands independently, optimized for speed.
@@ -124,6 +118,31 @@ def detect_gesture(results):
                 detected_gesture = "Neutral"
 
             # Apply optimized smoothing per hand
-            hand_gestures[i] = smooth_gesture(i, detected_gesture)
+            hand_gestures[i] = smooth_gesture(i, detected_gesture,confidence=.3)
 
     return hand_gestures  # Dictionary of gestures for each detected hand
+# MediaPipe Hands: Landmark Index Reference
+# -----------------------------------------
+# Index | Landmark                   | Description
+# -----------------------------------------
+#  0    | WRIST                      | Base of the hand (wrist joint)
+#  1    | THUMB_CMC                  | Thumb carpometacarpal (base of thumb)
+#  2    | THUMB_MCP                  | Thumb metacarpophalangeal (first thumb joint)
+#  3    | THUMB_IP                   | Thumb interphalangeal (middle thumb joint)
+#  4    | THUMB_TIP                  | Tip of the thumb
+#  5    | INDEX_FINGER_MCP           | Index finger metacarpophalangeal (base knuckle)
+#  6    | INDEX_FINGER_PIP           | Index finger proximal interphalangeal (middle joint)
+#  7    | INDEX_FINGER_DIP           | Index finger distal interphalangeal (near tip)
+#  8    | INDEX_FINGER_TIP           | Tip of the index finger
+#  9    | MIDDLE_FINGER_MCP          | Middle finger metacarpophalangeal (base knuckle)
+# 10    | MIDDLE_FINGER_PIP          | Middle finger proximal interphalangeal (middle joint)
+# 11    | MIDDLE_FINGER_DIP          | Middle finger distal interphalangeal (near tip)
+# 12    | MIDDLE_FINGER_TIP          | Tip of the middle finger
+# 13    | RING_FINGER_MCP            | Ring finger metacarpophalangeal (base knuckle)
+# 14    | RING_FINGER_PIP            | Ring finger proximal interphalangeal (middle joint)
+# 15    | RING_FINGER_DIP            | Ring finger distal interphalangeal (near tip)
+# 16    | RING_FINGER_TIP            | Tip of the ring finger
+# 17    | PINKY_MCP                  | Pinky finger metacarpophalangeal (base knuckle)
+# 18    | PINKY_PIP                  | Pinky finger proximal interphalangeal (middle joint)
+# 19    | PINKY_DIP                  | Pinky finger distal interphalangeal (near tip)
+# 20    | PINKY_TIP                  | Tip of the pinky finger
